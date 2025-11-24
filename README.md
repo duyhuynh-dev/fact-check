@@ -2,6 +2,48 @@
 
 Prototype roadmap for an antisemitism-oriented fact-checking assistant.
 
+## 🚀 Quick Start (Free for Class Projects!)
+
+This project supports **100% free operation** using:
+
+- **spaCy** for intelligent claim extraction (NLP)
+- **Google Gemini API** for verification (generous free tier)
+- **Local embeddings** for evidence retrieval (sentence-transformers)
+
+### Setup (5 minutes)
+
+1. **Install dependencies:**
+
+   ```bash
+   poetry install
+   poetry run python -m spacy download en_core_web_sm
+   ```
+
+2. **Get free Gemini API key:**
+
+   - Visit https://aistudio.google.com/
+   - Click "Get API Key" → Create new key
+   - Copy the key
+
+3. **Configure `.env`:**
+
+   ```bash
+   cp .env.example .env
+   # Edit .env and add:
+   GEMINI_API_KEY=your_key_here
+   VERIFICATION_PROVIDER=gemini
+   CLAIM_EXTRACTOR=spacy
+   ```
+
+4. **Run the server:**
+   ```bash
+   poetry run uvicorn backend.app.main:app --reload
+   ```
+
+See `docs/gemini_setup.md` for detailed instructions.
+
+**Cost: $0.00** (within Gemini free tier limits) 🎉
+
 ## Vision
 
 - ingest antisemitism-related content (PDFs, images, plain text) and normalize it
@@ -34,12 +76,15 @@ Prototype roadmap for an antisemitism-oriented fact-checking assistant.
 1. **Documentation & Repo Setup**
    - ✅ Stack chosen: Python 3.11, FastAPI, LangChain/LlamaIndex, PostgreSQL + pgvector.
    - ✅ Repo skeleton + starter docs (`docs/architecture.md`, `docs/contributing.md`).
+
+- Background jobs now go through a queue abstraction (`SyncJobQueue` by default, `ArqJobQueue` when `QUEUE_BACKEND=arq`), enabling horizontal scaling for OCR/claim extraction workers.
+
 2. **Data & Knowledge Base**
    - Identify public antisemitism corpora, licensing constraints.
    - Build ingestion scripts and metadata schema.
 3. **Claim Extraction Prototype**
-   - Evaluate LLM prompts vs lightweight classifiers.
-   - Collect evaluation set for tuning.
+   - ✅ Heuristic sentence-based extractor auto-populates `Claim` rows post-ingestion.
+   - Next: integrate LLM-backed prompts + evaluation datasets.
 4. **Retriever + Evidence Store**
    - Stand up vector DB (e.g., Chroma, pgvector).
    - Implement hybrid search API with caching.
@@ -69,6 +114,8 @@ Prototype roadmap for an antisemitism-oriented fact-checking assistant.
 
 - `README`: vision, architecture, quick start.
 - `docs/architecture.md`: diagrams, data flow, RAG pipeline details.
+- `docs/ingestion.md`: upload pipeline, OCR choices, async flow.
+- `docs/claims.md`: claim extraction contract, evaluation hooks, next steps.
 - `docs/datasets.md`: sources, licensing, update cadence.
 - `docs/safety.md`: limitations, review procedures, escalation paths.
 - `docs/api.md`: endpoints for ingestion, verification, reporting.

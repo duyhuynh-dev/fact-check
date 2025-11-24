@@ -31,6 +31,13 @@ backend/
 1. **Upload**: `/v1/documents` accepts PDF/image/text; stores artifact in `data/` and records metadata.
 2. **Preprocess**: OCR/clean text, segment sentences, enqueue claim extraction job.
 3. **Claim Extraction**: LLM prompt extracts structured claims with spans; store in DB.
+
+### Claim Extraction Notes
+
+- `backend/app/services/claims.py` contains `ClaimService` with pluggable extractors (currently `SimpleSentenceExtractor`).
+- Ingestion worker triggers extraction after OCR; API exposes `/v1/documents/{id}/claims` and re-run endpoint.
+- Claims stored in `claims` table with spans, metadata, and verdict placeholders for future verification.
+
 4. **Evidence Retrieval**: For each claim, embed and query vector store; cache passages + citations.
 5. **Verification**: LLM compares claim vs evidence, emits verdict, rationale, confidence score.
 6. **Reporting**: `/v1/reports/{doc_id}` returns per-claim verdicts + aggregated score.

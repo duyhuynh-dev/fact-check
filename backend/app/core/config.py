@@ -1,31 +1,44 @@
 """Application configuration helpers."""
 
 from functools import lru_cache
-import os
-from pydantic import BaseModel, Field, HttpUrl
+from pathlib import Path
+
+from pydantic import Field, HttpUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseModel):
-    """Basic settings object populated from environment variables."""
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables and .env file."""
 
-    app_env: str = Field(default=os.getenv("APP_ENV", "development"))
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_env: str = Field(default="development")
     database_dsn: str = Field(
-        default=os.getenv(
-            "POSTGRES_DSN",
-            "postgresql+psycopg://user:password@localhost:5432/factcheck",
-        )
+        default="postgresql+psycopg://user:password@localhost:5432/factcheck"
     )
-    ingest_bucket_path: str = Field(
-        default=os.getenv("INGEST_BUCKET_PATH", "./data/uploads")
+    ingest_bucket_path: str = Field(default="./data/uploads")
+    processed_text_path: str = Field(default="./data/processed")
+    vectorstore_path: str = Field(default="./vectorstore")
+    docs_base_url: HttpUrl | None = Field(default=None)
+    queue_backend: str = Field(default="sync")
+    redis_dsn: str | None = Field(default=None)
+    claim_extractor: str = Field(
+        default="simple", description="simple | spacy | llm"
     )
-    processed_text_path: str = Field(
-        default=os.getenv("PROCESSED_TEXT_PATH", "./data/processed")
+    verification_provider: str = Field(
+        default="gemini", description="gemini (free) | openai | free (mock)"
     )
-    vectorstore_path: str = Field(
-        default=os.getenv("VECTORSTORE_PATH", "./vectorstore")
-    )
-    docs_base_url: HttpUrl | None = Field(
-        default=os.getenv("DOCS_BASE_URL", "https://example.org/docs")
+    openai_api_key: str | None = Field(default=None)
+    openai_model: str = Field(default="gpt-4o-mini")
+    gemini_api_key: str | None = Field(default=None)
+    gemini_model: str = Field(default="gemini-1.5-flash")
+    free_mode: bool = Field(
+        default=False,
+        description="Free mode: uses local models and mock verification (no API costs)",
     )
 
 

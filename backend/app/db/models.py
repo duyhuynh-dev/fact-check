@@ -1,6 +1,6 @@
 """SQLModel definitions for documents, claims, and evidence records."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -8,12 +8,16 @@ from sqlalchemy import Column, JSON, String
 from sqlmodel import Field, Relationship, SQLModel
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class TimestampMixin(SQLModel):
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         nullable=False,
-        sa_column_kwargs={"onupdate": datetime.utcnow},
+        sa_column_kwargs={"onupdate": utc_now},
     )
 
 
@@ -42,9 +46,7 @@ class Document(DocumentBase, TimestampMixin, table=True):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        primary_key=True,
-        index=True,
-        sa_column=Column(String, unique=True),
+        sa_column=Column(String, primary_key=True, unique=True, index=True),
     )
 
     claims: list["Claim"] = Relationship(back_populates="document")
@@ -66,6 +68,11 @@ class ClaimBase(SQLModel):
         sa_column=Column(JSON),
         description="Optional dense embedding stored as JSON until pgvector is wired.",
     )
+    metadata_json: dict | None = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="Extractor metadata such as prompt version or confidence.",
+    )
 
 
 class Claim(ClaimBase, TimestampMixin, table=True):
@@ -73,9 +80,7 @@ class Claim(ClaimBase, TimestampMixin, table=True):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        primary_key=True,
-        index=True,
-        sa_column=Column(String, unique=True),
+        sa_column=Column(String, primary_key=True, unique=True, index=True),
     )
     document_id: str = Field(
         foreign_key="documents.id",
@@ -107,9 +112,7 @@ class Evidence(EvidenceBase, TimestampMixin, table=True):
 
     id: str = Field(
         default_factory=lambda: str(uuid4()),
-        primary_key=True,
-        index=True,
-        sa_column=Column(String, unique=True),
+        sa_column=Column(String, primary_key=True, unique=True, index=True),
     )
     claim_id: str = Field(
         foreign_key="claims.id",
