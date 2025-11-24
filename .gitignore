@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.DS_Store
+/data/*
+!/data/.gitkeep
+/samples/*
+!/samples/.gitkeep
+/vectorstore/
+/reports/
+*.log
+
