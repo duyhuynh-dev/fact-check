@@ -33,20 +33,21 @@ RUN pip install --no-cache-dir -r requirements.txt || \
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
 
-# Copy application code (including frontend)
-COPY . .
+# Copy backend code first
+COPY backend/ ./backend/
+COPY pyproject.toml requirements.txt ./
 
-# Explicitly verify frontend directory was copied
-RUN echo "=== Checking for frontend directory ===" && \
-    ls -la /app/ | head -20 && \
+# Explicitly copy frontend directory
+COPY frontend/ ./frontend/
+
+# Verify frontend was copied
+RUN echo "=== Verifying frontend directory ===" && \
+    ls -la /app/ && \
     if [ -d "/app/frontend" ]; then \
-        echo "✓ Frontend directory found at /app/frontend"; \
-        echo "Frontend contents:"; \
+        echo "✓ Frontend directory found"; \
         ls -la /app/frontend/; \
     else \
-        echo "✗ ERROR: Frontend directory NOT found at /app/frontend"; \
-        echo "Root directory contents:"; \
-        ls -la /app/; \
+        echo "✗ ERROR: Frontend directory NOT found"; \
         exit 1; \
     fi
 
