@@ -39,6 +39,14 @@ class DocumentBase(SQLModel):
         max_length=32,
     )
     ingest_failure_reason: str | None = Field(default=None)
+    ingest_progress: float | None = Field(
+        default=None,
+        description="Processing progress (0.0-1.0)",
+    )
+    ingest_progress_message: str | None = Field(
+        default=None,
+        description="Current processing stage message",
+    )
 
 
 class Document(DocumentBase, TimestampMixin, table=True):
@@ -58,7 +66,7 @@ class ClaimBase(SQLModel):
     span_end: int | None = Field(default=None)
     verdict: str | None = Field(
         default=None,
-        description="supported | partial | contradicted | no_evidence",
+        description="supported | partial | contradicted | no_evidence | not_applicable | antisemitic_trope",
         max_length=32,
     )
     rationale: str | None = Field(default=None)
@@ -94,16 +102,26 @@ class Claim(ClaimBase, TimestampMixin, table=True):
 
 class EvidenceBase(SQLModel):
     source_name: str = Field(description="Dataset or publication name.")
-    source_uri: str | None = Field(default=None)
+    source_uri: str | None = Field(default=None, description="URL or citation to original source.")
     snippet: str = Field(description="Relevant excerpt supporting or refuting the claim.")
     verdict_contribution: str = Field(
         description="supports | refutes | neutral",
         max_length=32,
     )
+    citation: str | None = Field(
+        default=None,
+        description="Formal citation (e.g., 'ADL Report 2023, p. 45')",
+    )
+    author: str | None = Field(default=None, description="Author or organization of source.")
+    publication_date: str | None = Field(default=None, description="Publication date if known.")
+    reliability_score: float | None = Field(
+        default=None,
+        description="Source reliability score (0-1), based on source type and verification.",
+    )
     metadata_json: dict | None = Field(
         default=None,
         sa_column=Column(JSON),
-        description="Additional structured metadata (page, paragraph, etc.).",
+        description="Additional structured metadata (page, paragraph, topic tags, etc.).",
     )
 
 

@@ -17,6 +17,8 @@ class DocumentRead(DocumentBase):
     ingest_failure_reason: Optional[str]
     raw_path: str
     text_path: Optional[str]
+    ingest_progress: Optional[float] = None
+    ingest_progress_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
