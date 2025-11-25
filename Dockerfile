@@ -10,21 +10,14 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Install Poetry
-RUN pip install poetry==1.8.3
+# Install dependencies directly with pip (more reliable than Poetry in Docker)
+COPY requirements.txt ./
 
-# Copy dependency files
-COPY pyproject.toml ./
+# Install dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Configure Poetry
-RUN poetry config virtualenvs.create false
-
-# Install dependencies - let Poetry resolve dependencies
-# This will work even if poetry.lock is out of sync
-RUN poetry install --no-dev --no-interaction --no-ansi || \
-    (echo "First attempt failed, trying without lock file..." && \
-     poetry lock --no-update && \
-     poetry install --no-dev --no-interaction --no-ansi)
+# Download spaCy model
+RUN python -m spacy download en_core_web_sm
 
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
