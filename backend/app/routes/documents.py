@@ -12,6 +12,8 @@ from fastapi import (
 )
 from sqlmodel import Session, select
 
+import logging
+
 from backend.app.db.models import Document
 from backend.app.db.session import get_session
 from backend.app.models.claims import ClaimList, ClaimRead
@@ -181,9 +183,18 @@ def get_document(
     document_id: str,
     session: Session = Depends(get_session),
 ) -> DocumentRead:
+    logger = logging.getLogger(__name__)
     document = session.get(Document, document_id)
     if document is None:
+        logger.warning("Document %s not found", document_id)
         raise HTTPException(status_code=404, detail="Document not found")
+    logger.info(
+        "Fetch document %s status=%s progress=%s message=%s",
+        document_id,
+        document.ingest_status,
+        document.ingest_progress,
+        document.ingest_progress_message,
+    )
     return DocumentRead.model_validate(document)
 
 
@@ -228,8 +239,10 @@ def get_document_results(
     session: Session = Depends(get_session),
 ) -> DocumentResults:
     """Get aggregated results including overall score and verdict breakdown."""
+    logger = logging.getLogger(__name__)
     document = session.get(Document, document_id)
     if document is None:
+        logger.warning("Results requested for missing document %s", document_id)
         raise HTTPException(status_code=404, detail="Document not found")
 
     claims = session.exec(select(Claim).where(Claim.document_id == document_id)).all()
@@ -280,8 +293,7 @@ def get_document_results(
         risk_level = "high"
 
     verified_claims = total_claims - verdict_counts["unverified"]
-
-    return DocumentResults(
+    results = DocumentResults(
         document_id=document_id,
         total_claims=total_claims,
         verified_claims=verified_claims,
@@ -297,4 +309,12 @@ def get_document_results(
         ),
         risk_level=risk_level,
     )
+    logger.info(
+        "Results prepared for document %s: total_claims=%s verified=%s score=%s",
+        document_id,
+        total_claims,
+        verified_claims,
+        results.overall_score,
+    )
+    return results
 

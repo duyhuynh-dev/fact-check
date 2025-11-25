@@ -118,7 +118,7 @@ async function waitForIngestion(documentId) {
     
     return new Promise((resolve, reject) => {
         let attempts = 0;
-        const maxAttempts = 60; // 60 seconds max
+        const maxAttempts = 180; // allow up to 3 minutes for large docs
         
         checkInterval = setInterval(async () => {
             attempts++;
@@ -208,7 +208,10 @@ async function showResults(documentId) {
     try {
         // Load document info
         const docResponse = await fetch(`${API_BASE}/v1/documents/${documentId}`);
-        if (!docResponse.ok) throw new Error('Failed to load document');
+        if (!docResponse.ok) {
+            const errorText = await docResponse.text();
+            throw new Error(`Failed to load document (${docResponse.status}): ${errorText}`);
+        }
         const docData = await docResponse.json();
         
         document.getElementById('documentTitle').textContent = docData.title || 'Document';
@@ -218,14 +221,20 @@ async function showResults(documentId) {
         
         // Load results
         const resultsResponse = await fetch(`${API_BASE}/v1/documents/${documentId}/results`);
-        if (!resultsResponse.ok) throw new Error('Failed to load results');
+        if (!resultsResponse.ok) {
+            const errorText = await resultsResponse.text();
+            throw new Error(`Failed to load results (${resultsResponse.status}): ${errorText}`);
+        }
         const results = await resultsResponse.json();
         
         displayResults(results);
         
         // Load claims
         const claimsResponse = await fetch(`${API_BASE}/v1/documents/${documentId}/claims`);
-        if (!claimsResponse.ok) throw new Error('Failed to load claims');
+        if (!claimsResponse.ok) {
+            const errorText = await claimsResponse.text();
+            throw new Error(`Failed to load claims (${claimsResponse.status}): ${errorText}`);
+        }
         const claimsData = await claimsResponse.json();
         
         displayClaims(claimsData.items);

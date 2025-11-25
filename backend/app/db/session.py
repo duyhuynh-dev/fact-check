@@ -5,6 +5,18 @@ from collections.abc import Generator
 
 from sqlmodel import Session, SQLModel, create_engine
 
+def _build_engine(dsn: str):
+    connect_args = {}
+    if dsn.startswith("sqlite"):
+        # Allow SQLite connections across threads (needed for background jobs)
+        connect_args = {"check_same_thread": False}
+    return create_engine(
+        dsn,
+        pool_pre_ping=True,
+        echo=False,
+        connect_args=connect_args,
+    )
+
 _engine = None
 
 
@@ -16,13 +28,20 @@ def get_engine():
             from backend.app.core.config import get_settings
 
             dsn = get_settings().database_dsn
-        _engine = create_engine(dsn, pool_pre_ping=True, echo=False)
+        _engine = _build_engine(dsn)
     return _engine
 
 
 def init_db() -> None:
-    """Create database tables if they do not exist."""
+    """Create database tables if they do not exist and run migrations."""
     SQLModel.metadata.create_all(bind=get_engine())
+    # Run migrations for schema updates
+    try:
+        from backend.app.db.migrations import run_migrations
+        run_migrations()
+    except Exception as e:
+        # Migration failures are non-fatal in development
+        print(f"⚠️  Migration warning: {e}")
 
 
 def get_session() -> Generator[Session, None, None]:
