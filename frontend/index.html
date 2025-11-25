@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duy Huynh - Fact-Check Assistant</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">Duy Huynh</div>
+            <nav class="nav">
+                <a href="#upload" class="nav-link">Upload</a>
+                <a href="#results" class="nav-link">Results</a>
+            </nav>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="hero" id="upload">
+            <h1 class="hero-title">
+                <span class="title-line">Verify</span>
+                <span class="title-line">Antisemitism-Related</span>
+                <span class="title-line highlight">Claims</span>
+            </h1>
+            <p class="hero-subtitle">AI-powered fact-checking with evidence-based verification. Upload documents or screenshots to verify claims.</p>
+            
+            <!-- Upload Area -->
+            <div class="upload-section">
+                <div class="upload-box" id="uploadBox">
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp,.bmp" style="display: none;">
+                    <div class="upload-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="upload-text">Drop your document or screenshot here or click to browse</p>
+                        <p class="upload-hint">Supports PDF, DOCX, TXT, and images (PNG, JPG, GIF, WEBP)</p>
+                    </div>
+                </div>
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">Processing...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="results" style="display: none;">
+            <div class="results-header">
+                <h2 class="results-title">Verification Results</h2>
+                <button class="btn-secondary" id="newDocumentBtn">Upload New Document</button>
+            </div>
+
+            <!-- Document Info -->
+            <div class="document-info" id="documentInfo">
+                <h3 id="documentTitle">Document</h3>
+                <div class="status-badge" id="statusBadge">Processing</div>
+            </div>
+
+            <!-- Overall Score -->
+            <div class="score-card" id="scoreCard">
+                <div class="score-circle">
+                    <svg class="score-svg" viewBox="0 0 100 100">
+                        <circle class="score-bg" cx="50" cy="50" r="45"></circle>
+                        <circle class="score-fill" id="scoreCircle" cx="50" cy="50" r="45"></circle>
+                    </svg>
+                    <div class="score-value" id="scoreValue">--</div>
+                </div>
+                <div class="score-info">
+                    <h3 class="risk-level" id="riskLevel">--</h3>
+                    <p class="score-label">Overall Accuracy Score</p>
+                </div>
+            </div>
+
+            <!-- Verdict Summary -->
+            <div class="verdict-summary" id="verdictSummary">
+                <h3>Verdict Breakdown</h3>
+                <div class="verdict-stats">
+                    <div class="stat-item supported">
+                        <div class="stat-value" id="statSupported">0</div>
+                        <div class="stat-label">Supported</div>
+                    </div>
+                    <div class="stat-item partial">
+                        <div class="stat-value" id="statPartial">0</div>
+                        <div class="stat-label">Partial</div>
+                    </div>
+                    <div class="stat-item contradicted">
+                        <div class="stat-value" id="statContradicted">0</div>
+                        <div class="stat-label">Contradicted</div>
+                    </div>
+                    <div class="stat-item no-evidence">
+                        <div class="stat-value" id="statNoEvidence">0</div>
+                        <div class="stat-label">No Evidence</div>
+                    </div>
+                    <div class="stat-item not-applicable">
+                        <div class="stat-value" id="statNotApplicable">0</div>
+                        <div class="stat-label">Not Applicable</div>
+                    </div>
+                    <div class="stat-item antisemitic-trope">
+                        <div class="stat-value" id="statAntisemiticTrope">0</div>
+                        <div class="stat-label">Antisemitic Trope</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Claims List -->
+            <div class="claims-section">
+                <h3>Extracted Claims</h3>
+                <div class="claims-list" id="claimsList"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
+

@@ -37,10 +37,10 @@ RUN python -m spacy download en_core_web_sm
 COPY backend/ ./backend/
 COPY pyproject.toml requirements.txt ./
 
-# Explicitly copy frontend directory
+# Copy frontend directory (must exist in build context)
 COPY frontend/ ./frontend/
 
-# Copy evidence data
+# Copy evidence data (must exist in build context)
 COPY data/evidence/ ./data/evidence/
 
 # Verify frontend was copied

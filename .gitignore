@@ -3,8 +3,12 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .DS_Store
-/data/*
+/data/uploads/*
+/data/processed/*
 !/data/.gitkeep
+!/data/evidence/
+/data/evidence/*.db
+/data/evidence/*.sqlite
 /samples/*
 !/samples/.gitkeep
 /vectorstore/
