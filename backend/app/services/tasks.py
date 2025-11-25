@@ -57,11 +57,18 @@ def run_ingestion_job(
             
             # OCR with progress tracking
             update_progress(0.1, "Extracting text from document...")
+            progress_cb = lambda p, msg: update_progress(0.1 + p * 0.3, msg)
             try:
                 text = ingestion_service.run_ocr(
                     file_path,
-                    progress_callback=lambda p, msg: update_progress(0.1 + p * 0.3, msg)
+                    progress_callback=progress_cb,
                 )
+            except TypeError as type_err:
+                # Fallback for ingestion services that don't support progress callbacks yet
+                if "progress_callback" in str(type_err):
+                    text = ingestion_service.run_ocr(file_path)
+                else:
+                    raise
             except MemoryError:
                 raise ValueError(
                     "Document is too large to process. Try splitting into smaller files (recommended: <500 pages)."
