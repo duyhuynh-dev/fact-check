@@ -125,7 +125,10 @@ async function waitForIngestion(documentId) {
             
             try {
                 const response = await fetch(`${API_BASE}/v1/documents/${documentId}`);
-                if (!response.ok) throw new Error('Failed to check status');
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Failed to check status: ${response.status} ${errorText.substring(0, 100)}`);
+                }
                 
                 const doc = await response.json();
                 
