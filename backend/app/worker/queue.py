@@ -22,16 +22,38 @@ class SyncJobQueue:
         """Enqueue job - run in background thread to avoid blocking."""
         import asyncio
         import logging
+        import concurrent.futures
         logger = logging.getLogger(__name__)
         
         # Run the sync function in a thread pool to avoid blocking
+        # Use a separate executor to prevent blocking the event loop
         loop = asyncio.get_event_loop()
-        try:
-            await loop.run_in_executor(None, run_ingestion_job, document_id)
-            logger.info(f"Job completed for document {document_id}")
-        except Exception as e:
-            logger.error(f"Job failed for document {document_id}: {str(e)}", exc_info=True)
-            # Don't raise - let the job handle its own error reporting
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        
+        def run_job():
+            try:
+                run_ingestion_job(document_id)
+                logger.info(f"Job completed for document {document_id}")
+            except Exception as e:
+                logger.error(f"Job failed for document {document_id}: {str(e)}", exc_info=True)
+                # Update document status to failed
+                try:
+                    from backend.app.db.session import get_engine
+                    from backend.app.db.models import Document
+                    from sqlmodel import Session
+                    with Session(get_engine()) as session:
+                        doc = session.get(Document, document_id)
+                        if doc:
+                            doc.ingest_status = "failed"
+                            doc.ingest_failure_reason = str(e)
+                            session.add(doc)
+                            session.commit()
+                except Exception as db_error:
+                    logger.error(f"Failed to update document status: {str(db_error)}")
+        
+        # Fire and forget - don't wait for completion
+        loop.run_in_executor(executor, run_job)
+        logger.info(f"Job enqueued (background) for document {document_id}")
 
 
 class ArqJobQueue:
