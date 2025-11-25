@@ -13,8 +13,22 @@ WORKDIR /app
 # Install dependencies directly with pip (more reliable than Poetry in Docker)
 COPY requirements.txt ./
 
+# Upgrade pip first for better dependency resolution
+RUN pip install --upgrade pip setuptools wheel
+
 # Install dependencies from requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Use --no-deps for packages with extras, then install them separately
+RUN pip install --no-cache-dir -r requirements.txt || \
+    (echo "First attempt failed, trying with relaxed constraints..." && \
+     pip install --no-cache-dir \
+        fastapi uvicorn[standard] python-multipart \
+        "pydantic>=2.7.4" "pydantic-settings>=2.1.0" \
+        sqlmodel "psycopg[binary]" httpx \
+        llama-index langchain langchain-openai \
+        openai numpy scikit-learn pillow pytesseract \
+        pdfplumber rapidocr-onnxruntime pdf2image \
+        tenacity python-docx arq spacy \
+        google-generativeai sentence-transformers pypdf)
 
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
