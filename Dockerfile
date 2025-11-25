@@ -30,8 +30,10 @@ RUN pip install --no-cache-dir -r requirements.txt || \
         tenacity python-docx arq spacy \
         google-generativeai sentence-transformers pypdf)
 
-# Download spaCy model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy model (with cache-busting to avoid Render cache issues)
+# Adding a timestamp comment to bust cache if needed
+RUN python -m spacy download en_core_web_sm || \
+    (echo "spaCy download failed, retrying..." && python -m spacy download en_core_web_sm)
 
 # Copy backend code first
 COPY backend/ ./backend/

@@ -59,26 +59,30 @@ def run_ingestion_job(
             update_progress(0.1, "Extracting text from document...")
             progress_cb = lambda p, msg: update_progress(0.1 + p * 0.3, msg)
             try:
-                text = ingestion_service.run_ocr(
-                    file_path,
-                    progress_callback=progress_cb,
-                )
-            except TypeError as type_err:
-                # Fallback for ingestion services that don't support progress callbacks yet
-                if "progress_callback" in str(type_err):
-                    text = ingestion_service.run_ocr(file_path)
-                else:
-                    raise
-
-            if not text or not text.strip():
-                raise ValueError(
-                    "Parsed document contains no text. "
-                    "If this is a scan or an image-heavy PDF, please upload a clearer copy or use the screenshot option."
-                )
+                try:
+                    text = ingestion_service.run_ocr(
+                        file_path,
+                        progress_callback=progress_cb,
+                    )
+                except TypeError as type_err:
+                    # Fallback for ingestion services that don't support progress callbacks yet
+                    if "progress_callback" in str(type_err):
+                        text = ingestion_service.run_ocr(file_path)
+                    else:
+                        raise
+                
+                if not text or not text.strip():
+                    raise ValueError(
+                        "Parsed document contains no text. "
+                        "If this is a scan or an image-heavy PDF, please upload a clearer copy or use the screenshot option."
+                    )
             except MemoryError:
                 raise ValueError(
                     "Document is too large to process. Try splitting into smaller files (recommended: <500 pages)."
                 )
+            except ValueError:
+                # Re-raise ValueError as-is (e.g., empty text)
+                raise
             except Exception as e:
                 if "memory" in str(e).lower() or "too large" in str(e).lower():
                     raise ValueError(
