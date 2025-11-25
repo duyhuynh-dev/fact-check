@@ -68,21 +68,34 @@ async function handleFile(file) {
         });
 
         if (!response.ok) {
-            // Try to get error details from response
+            // Try to get error details from response (read body only once)
             let errorMessage = `Upload failed: ${response.status} ${response.statusText}`;
             try {
-                const errorData = await response.json();
-                if (errorData.detail) {
-                    errorMessage += ` - ${errorData.detail}`;
-                } else if (errorData.message) {
-                    errorMessage += ` - ${errorData.message}`;
+                const contentType = response.headers.get('content-type') || '';
+                let errorText = '';
+                
+                // Read the response body only once
+                if (contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    if (errorData.detail) {
+                        errorText = errorData.detail;
+                    } else if (errorData.message) {
+                        errorText = errorData.message;
+                    } else if (typeof errorData === 'string') {
+                        errorText = errorData;
+                    } else {
+                        errorText = JSON.stringify(errorData);
+                    }
+                } else {
+                    errorText = await response.text();
+                }
+                
+                if (errorText) {
+                    errorMessage += ` - ${errorText.substring(0, 200)}`;
                 }
             } catch (e) {
-                // If response isn't JSON, use status text
-                const text = await response.text();
-                if (text) {
-                    errorMessage += ` - ${text.substring(0, 200)}`;
-                }
+                // If we can't parse the error, just use the status
+                console.error('Error parsing error response:', e);
             }
             throw new Error(errorMessage);
         }
