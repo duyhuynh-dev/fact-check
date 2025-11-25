@@ -40,14 +40,20 @@ COPY pyproject.toml requirements.txt ./
 # Explicitly copy frontend directory
 COPY frontend/ ./frontend/
 
+# Copy evidence data
+COPY data/evidence/ ./data/evidence/
+
 # Verify frontend was copied
 RUN echo "=== Verifying frontend directory ===" && \
     ls -la /app/ && \
     if [ -d "/app/frontend" ]; then \
         echo "✓ Frontend directory found"; \
+        echo "Frontend contents:"; \
         ls -la /app/frontend/; \
     else \
         echo "✗ ERROR: Frontend directory NOT found"; \
+        echo "Root directory contents:"; \
+        ls -la /app/; \
         exit 1; \
     fi
 
