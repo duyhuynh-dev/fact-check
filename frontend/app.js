@@ -68,7 +68,23 @@ async function handleFile(file) {
         });
 
         if (!response.ok) {
-            throw new Error(`Upload failed: ${response.statusText}`);
+            // Try to get error details from response
+            let errorMessage = `Upload failed: ${response.status} ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.detail) {
+                    errorMessage += ` - ${errorData.detail}`;
+                } else if (errorData.message) {
+                    errorMessage += ` - ${errorData.message}`;
+                }
+            } catch (e) {
+                // If response isn't JSON, use status text
+                const text = await response.text();
+                if (text) {
+                    errorMessage += ` - ${text.substring(0, 200)}`;
+                }
+            }
+            throw new Error(errorMessage);
         }
 
         const document = await response.json();

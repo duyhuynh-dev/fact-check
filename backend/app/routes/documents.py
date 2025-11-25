@@ -47,7 +47,7 @@ def get_claim_service() -> ClaimService:
     summary="Upload a document for fact-checking",
 )
 async def upload_document(
-    file: UploadFile = File(..., description="PDF, image, or text file."),
+    file: UploadFile = File(..., description="PDF, DOCX, image (PNG/JPG/GIF/WEBP), or text file."),
     title: str | None = Form(default=None),
     source_type: str = Form(default="upload"),
     session: Session = Depends(get_session),
@@ -55,21 +55,39 @@ async def upload_document(
     job_queue: JobQueue = Depends(get_job_queue),
 ) -> DocumentRead:
     """Accept a document upload, store the artifact, and create a DB record."""
-    file_bytes = await file.read()
-    stored_path = ingestion_service.store_raw(file_bytes, file.filename)
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"Received upload request: filename={file.filename}, title={title}")
+        file_bytes = await file.read()
+        logger.info(f"File read successfully, size: {len(file_bytes)} bytes")
+        
+        stored_path = ingestion_service.store_raw(file_bytes, file.filename)
+        logger.info(f"File stored at: {stored_path}")
 
-    document = Document(
-        title=title,
-        source_type=source_type,
-        raw_path=str(stored_path),
-        ingest_status="processing",
-    )
-    session.add(document)
-    session.commit()
-    session.refresh(document)
+        document = Document(
+            title=title or file.filename,
+            source_type=source_type,
+            raw_path=str(stored_path),
+            ingest_status="processing",
+        )
+        session.add(document)
+        session.commit()
+        session.refresh(document)
+        logger.info(f"Document created with ID: {document.id}")
 
-    await job_queue.enqueue(document.id)
-    return DocumentRead.model_validate(document)
+        await job_queue.enqueue(document.id)
+        logger.info(f"Job enqueued for document {document.id}")
+        
+        return DocumentRead.model_validate(document)
+    except Exception as e:
+        logger.error(f"Error uploading document: {str(e)}", exc_info=True)
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload document: {str(e)}"
+        )
 
 
 @router.get(
@@ -199,6 +217,8 @@ def get_document_results(
         "partial": 0,
         "contradicted": 0,
         "no_evidence": 0,
+        "not_applicable": 0,
+        "antisemitic_trope": 0,
         "unverified": 0,
     }
 
@@ -206,12 +226,13 @@ def get_document_results(
     for claim in claims:
         if claim.verdict:
             verdict_counts[claim.verdict] = verdict_counts.get(claim.verdict, 0) + 1
-            if claim.score is not None:
+            # Only include scores from factual claims (exclude not_applicable and antisemitic_trope)
+            if claim.score is not None and claim.verdict not in ["not_applicable", "antisemitic_trope"]:
                 scores.append(claim.score)
         else:
             verdict_counts["unverified"] += 1
 
-    # Calculate overall score (average of all claim scores)
+    # Calculate overall score (average of factual claim scores only, excluding not_applicable)
     overall_score = sum(scores) / len(scores) if scores else None
 
     # Determine risk level
@@ -236,6 +257,8 @@ def get_document_results(
             partial=verdict_counts["partial"],
             contradicted=verdict_counts["contradicted"],
             no_evidence=verdict_counts["no_evidence"],
+            not_applicable=verdict_counts["not_applicable"],
+            antisemitic_trope=verdict_counts["antisemitic_trope"],
             unverified=verdict_counts["unverified"],
         ),
         risk_level=risk_level,
