@@ -33,12 +33,22 @@ RUN pip install --no-cache-dir -r requirements.txt || \
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
 
-# Copy application code
+# Copy application code (including frontend)
 COPY . .
 
-# Verify frontend directory was copied
-RUN ls -la /app/ | grep -E "(frontend|backend)" || echo "Warning: frontend or backend not found"
-RUN if [ -d "/app/frontend" ]; then echo "✓ Frontend directory found"; ls -la /app/frontend/; else echo "✗ Frontend directory NOT found"; fi
+# Explicitly verify frontend directory was copied
+RUN echo "=== Checking for frontend directory ===" && \
+    ls -la /app/ | head -20 && \
+    if [ -d "/app/frontend" ]; then \
+        echo "✓ Frontend directory found at /app/frontend"; \
+        echo "Frontend contents:"; \
+        ls -la /app/frontend/; \
+    else \
+        echo "✗ ERROR: Frontend directory NOT found at /app/frontend"; \
+        echo "Root directory contents:"; \
+        ls -la /app/; \
+        exit 1; \
+    fi
 
 # Create necessary directories
 RUN mkdir -p data/uploads data/processed vectorstore
