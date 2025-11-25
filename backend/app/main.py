@@ -86,8 +86,41 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/healthz", tags=["health"])
-    async def healthcheck() -> dict[str, str]:
-        return {"status": "ok"}
+    async def healthcheck() -> dict:
+        """Health check endpoint with system status."""
+        from backend.app.core.config import get_settings
+        from backend.app.db.session import get_engine
+        from pathlib import Path
+        
+        status = {"status": "ok"}
+        
+        # Check database
+        try:
+            engine = get_engine()
+            with engine.connect() as conn:
+                conn.execute("SELECT 1")
+            status["database"] = "ok"
+        except Exception as e:
+            status["database"] = f"error: {str(e)}"
+            status["status"] = "degraded"
+        
+        # Check file directories
+        settings = get_settings()
+        try:
+            uploads_dir = Path(settings.ingest_bucket_path)
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            status["uploads_dir"] = "ok" if uploads_dir.exists() and uploads_dir.is_dir() else "missing"
+        except Exception as e:
+            status["uploads_dir"] = f"error: {str(e)}"
+        
+        try:
+            processed_dir = Path(settings.processed_text_path)
+            processed_dir.mkdir(parents=True, exist_ok=True)
+            status["processed_dir"] = "ok" if processed_dir.exists() and processed_dir.is_dir() else "missing"
+        except Exception as e:
+            status["processed_dir"] = f"error: {str(e)}"
+        
+        return status
     
     @app.get("/debug/paths", tags=["debug"])
     async def debug_paths() -> dict:
