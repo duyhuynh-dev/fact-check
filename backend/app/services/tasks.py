@@ -69,6 +69,12 @@ def run_ingestion_job(
                     text = ingestion_service.run_ocr(file_path)
                 else:
                     raise
+
+            if not text or not text.strip():
+                raise ValueError(
+                    "Parsed document contains no text. "
+                    "If this is a scan or an image-heavy PDF, please upload a clearer copy or use the screenshot option."
+                )
             except MemoryError:
                 raise ValueError(
                     "Document is too large to process. Try splitting into smaller files (recommended: <500 pages)."
@@ -85,7 +91,15 @@ def run_ingestion_job(
             document.text_path = str(text_path)
             
             update_progress(0.5, "Extracting claims...")
-            claims = ClaimService().extract_for_document(session, document)
+            try:
+                claims = ClaimService().extract_for_document(session, document)
+            except Exception as claim_error:
+                raise ValueError(f"Claim extraction failed: {claim_error}") from claim_error
+            if not claims:
+                raise ValueError(
+                    "No claims were detected in the parsed text. "
+                    "Please ensure the document contains factual statements or try a different section."
+                )
             document.ingest_progress = 0.6
             document.ingest_progress_message = f"Extracted {len(claims)} claims. Verifying..."
             session.add(document)
