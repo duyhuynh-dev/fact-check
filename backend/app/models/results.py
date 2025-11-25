@@ -10,6 +10,8 @@ class VerdictSummary(BaseModel):
     partial: int = Field(default=0, description="Number of partially supported claims")
     contradicted: int = Field(default=0, description="Number of contradicted claims")
     no_evidence: int = Field(default=0, description="Number of claims with no evidence")
+    not_applicable: int = Field(default=0, description="Number of claims that are not factual (e.g., religious texts)")
+    antisemitic_trope: int = Field(default=0, description="Number of claims using antisemitic tropes or stereotypes")
     unverified: int = Field(default=0, description="Number of claims not yet verified")
 
 

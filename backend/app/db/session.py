@@ -21,8 +21,15 @@ def get_engine():
 
 
 def init_db() -> None:
-    """Create database tables if they do not exist."""
+    """Create database tables if they do not exist and run migrations."""
     SQLModel.metadata.create_all(bind=get_engine())
+    # Run migrations for schema updates
+    try:
+        from backend.app.db.migrations import run_migrations
+        run_migrations()
+    except Exception as e:
+        # Migration failures are non-fatal in development
+        print(f"⚠️  Migration warning: {e}")
 
 
 def get_session() -> Generator[Session, None, None]:

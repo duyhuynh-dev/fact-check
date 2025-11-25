@@ -1,4 +1,4 @@
-"""Claim extraction services."""
+"""Claim extraction service (MVP: sentence splitting, future: LLM-based)."""
 
 from __future__ import annotations
 
@@ -8,14 +8,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from sqlmodel import Session, delete
+from sqlmodel import Session, delete, select
 
 from backend.app.core.config import get_settings
 from backend.app.db.models import Claim, Document
+from backend.app.services.semantic_analysis import create_semantic_analyzer
 
 
 @dataclass
 class ClaimCandidate:
+    """A candidate claim extracted from text."""
+
     text: str
     span_start: int | None = None
     span_end: int | None = None
@@ -23,7 +26,7 @@ class ClaimCandidate:
 
 
 class ClaimExtractor(Protocol):
-    """Extractor interface."""
+    """Interface for claim extraction strategies."""
 
     def extract(self, text: str) -> list[ClaimCandidate]: ...
 
@@ -46,10 +49,80 @@ class SpacyClaimExtractor:
             raise ImportError(
                 "spacy not installed. Install with: poetry add spacy && python -m spacy download en_core_web_sm"
             )
+        
+        # Initialize semantic analyzer for coded language detection
+        try:
+            self.semantic_analyzer = create_semantic_analyzer()
+        except Exception:
+            # Fallback if analyzer can't be created
+            self.semantic_analyzer = None
 
     def extract(self, text: str) -> list[ClaimCandidate]:
-        """Extract claims using spaCy NLP."""
+        """Extract claims using spaCy NLP with semantic/conceptual analysis."""
+        
+        # For short texts (like tweets), keep as single claim with full context
+        if len(text.strip()) < 500:
+            # Run semantic analysis on full text
+            semantic_analysis = None
+            if self.semantic_analyzer:
+                try:
+                    semantic_analysis = self.semantic_analyzer.analyze(text.strip())
+                except Exception:
+                    pass
+            
+            metadata = {
+                "strategy": "spacy_fulltext_short",
+                "is_short_text": True,
+            }
+            
+            if semantic_analysis:
+                metadata["semantic_analysis"] = {
+                    "is_antisemitic": semantic_analysis.is_antisemitic,
+                    "confidence": semantic_analysis.confidence,
+                    "detected_patterns": semantic_analysis.detected_patterns,
+                    "coded_language_detected": semantic_analysis.coded_language_detected,
+                    "implicit_meaning": semantic_analysis.implicit_meaning,
+                }
+            
+            return [
+                ClaimCandidate(
+                    text=text.strip(),
+                    span_start=0,
+                    span_end=len(text),
+                    metadata=metadata,
+                )
+            ]
+        
+        # For longer texts, use sentence-based extraction
         doc = self.nlp(text)
+        
+        # Get paragraph context for semantic analysis
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        
+        # Build a simple map: for each sentence, find which paragraph it's in
+        def get_paragraph_for_position(pos: int) -> str:
+            """Find the paragraph containing a given character position."""
+            current_pos = 0
+            for para in paragraphs:
+                para_start = current_pos
+                para_end = current_pos + len(para)
+                if para_start <= pos <= para_end:
+                    return para
+                current_pos = para_end + 2  # +2 for \n\n separator
+            return paragraphs[0] if paragraphs else ""
+
+        # Conspiracy theory indicators
+        conspiracy_patterns = [
+            "secret", "conspiracy", "plot", "control", "network", "shadow",
+            "behind the scenes", "they", "them", "international", "global",
+            "spying", "surveillance", "intrigue", "manipulate", "influence"
+        ]
+        
+        # Antisemitic trope keywords
+        antisemitic_keywords = [
+            "zionist", "jewish", "jew", "israel", "holocaust", "protocols",
+            "elders of zion", "world domination", "control banks", "control media"
+        ]
 
         candidates: list[ClaimCandidate] = []
         for sent in doc.sents:
@@ -57,16 +130,96 @@ class SpacyClaimExtractor:
             if len(sent_text) < 20:
                 continue
 
-            # Filter for factual statements (not questions, exclamations)
-            if sent_text.endswith("?") or sent_text.endswith("!"):
+            # Don't filter out exclamations - they might be threats
+            # Only filter questions
+            if sent_text.endswith("?"):
                 continue
 
+            sent_lower = sent_text.lower()
+            
+            # Detect conspiracy theory language
+            has_conspiracy_language = any(pattern in sent_lower for pattern in conspiracy_patterns)
+            has_antisemitic_keywords = any(keyword in sent_lower for keyword in antisemitic_keywords)
+            
             # Look for factual indicators (dates, numbers, named entities)
-            has_entities = any(ent.label_ in ["PERSON", "ORG", "GPE", "DATE", "CARDINAL"] for ent in sent.ents)
+            entities = list(sent.ents)
+            has_entities = any(ent.label_ in ["PERSON", "ORG", "GPE", "DATE", "CARDINAL", "EVENT"] for ent in entities)
             has_verbs = any(token.pos_ == "VERB" for token in sent)
+            
+            # Check for claims about responsibility/blame (common in antisemitic rhetoric)
+            has_responsibility_verbs = any(
+                token.lemma_.lower() in ["bear", "responsible", "blame", "cause", "control", "influence"]
+                for token in sent
+            )
+            
+            # Check for threatening language
+            threat_keywords = ["war", "threaten", "example", "show", "get you", "gone get"]
+            has_threat_language = any(keyword in sent_lower for keyword in threat_keywords)
 
-            # Prioritize sentences with entities and verbs (more likely to be factual claims)
-            if has_entities or has_verbs:
+            # Get paragraph context for semantic analysis
+            context = get_paragraph_for_position(sent.start_char)
+            
+            # Run semantic analysis for coded language detection
+            # Skip for very long documents to speed up processing
+            semantic_analysis = None
+            if self.semantic_analyzer and len(text) < 50000:  # Skip semantic analysis for very long docs
+                try:
+                    # Use full paragraph context for better understanding
+                    semantic_analysis = self.semantic_analyzer.analyze(sent_text, context=context)
+                except Exception:
+                    pass  # Continue without semantic analysis if it fails
+            
+            # Prioritize sentences that:
+            # 1. Have entities/verbs (factual claims)
+            # 2. Contain conspiracy language (important to fact-check)
+            # 3. Contain antisemitic keywords (critical to verify)
+            # 4. Make responsibility/blame claims
+            # 5. Semantic analysis detects antisemitic content (even without keywords)
+            # 6. Contain threatening language directed at groups
+            has_semantic_antisemitism = (
+                semantic_analysis and 
+                semantic_analysis.is_antisemitic and 
+                semantic_analysis.confidence > 0.5
+            )
+            
+            if has_entities or has_verbs or has_conspiracy_language or has_antisemitic_keywords or has_responsibility_verbs or has_semantic_antisemitism or has_threat_language:
+                # Calculate claim importance score
+                importance = 0
+                if has_entities:
+                    importance += 1
+                if has_verbs:
+                    importance += 1
+                if has_conspiracy_language:
+                    importance += 2  # Higher weight for conspiracy claims
+                if has_antisemitic_keywords:
+                    importance += 3  # Highest weight for antisemitic content
+                if has_responsibility_verbs:
+                    importance += 1
+                if has_semantic_antisemitism:
+                    importance += 4  # Highest weight for semantically detected antisemitism
+                if has_threat_language:
+                    importance += 3  # High weight for threatening language
+                
+                metadata = {
+                    "strategy": "spacy_nlp_enhanced",
+                    "has_entities": has_entities,
+                    "entity_count": len(entities),
+                    "has_conspiracy_language": has_conspiracy_language,
+                    "has_antisemitic_keywords": has_antisemitic_keywords,
+                    "has_threat_language": has_threat_language,
+                    "importance_score": importance,
+                }
+                
+                # Add semantic analysis results
+                if semantic_analysis:
+                    metadata["semantic_analysis"] = {
+                        "is_antisemitic": semantic_analysis.is_antisemitic,
+                        "confidence": semantic_analysis.confidence,
+                        "detected_patterns": semantic_analysis.detected_patterns,
+                        "coded_language_detected": semantic_analysis.coded_language_detected,
+                        "implicit_meaning": semantic_analysis.implicit_meaning,
+                    }
+                
                 span_start = sent.start_char
                 span_end = sent.end_char
                 candidates.append(
@@ -74,13 +227,12 @@ class SpacyClaimExtractor:
                         text=sent_text,
                         span_start=span_start,
                         span_end=span_end,
-                        metadata={
-                            "strategy": "spacy_nlp",
-                            "has_entities": has_entities,
-                            "entity_count": len(list(sent.ents)),
-                        },
+                        metadata=metadata,
                     )
                 )
+
+        # Sort by importance score (most important claims first)
+        candidates.sort(key=lambda x: x.metadata.get("importance_score", 0) if x.metadata else 0, reverse=True)
 
         # Fallback if no good candidates found
         if not candidates and text.strip():
@@ -105,6 +257,17 @@ class SimpleSentenceExtractor:
         self.min_length = min_length
 
     def extract(self, text: str) -> list[ClaimCandidate]:
+        # For short texts, keep as single claim
+        if len(text.strip()) < 500:
+            return [
+                ClaimCandidate(
+                    text=text.strip(),
+                    span_start=0,
+                    span_end=len(text),
+                    metadata={"strategy": "simple_fulltext_short"},
+                )
+            ]
+        
         candidates: list[ClaimCandidate] = []
         for match in self.sentence_regex.finditer(text):
             sentence = match.group(0).strip()
@@ -187,6 +350,33 @@ class LLMClaimExtractor:
         self.model = model
 
     def extract(self, text: str) -> list[ClaimCandidate]:
+        # For short texts, keep as single claim and analyze with LLM
+        if len(text.strip()) < 500:
+            prompt = """Analyze this text for antisemitic content, factual claims, or problematic statements. 
+            If it's antisemitic, threatening, or uses stereotypes, identify it as such.
+            Return JSON with: {"is_antisemitic": boolean, "is_factual_claim": boolean, "explanation": string}"""
+            
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are an expert in detecting antisemitic content and factual claims."},
+                        {"role": "user", "content": text[:2000]},
+                    ],
+                )
+                # Parse response if needed
+            except Exception:
+                pass
+            
+            return [
+                ClaimCandidate(
+                    text=text.strip(),
+                    span_start=0,
+                    span_end=len(text),
+                    metadata={"strategy": "llm_fulltext_short"},
+                )
+            ]
+        
         prompt = (
             "Extract factual claims from the provided text. "
             "Return JSON array with objects: "
@@ -248,4 +438,3 @@ class LLMClaimExtractor:
                 )
             )
         return candidates
-

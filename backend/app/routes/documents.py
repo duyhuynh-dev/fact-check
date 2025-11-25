@@ -47,7 +47,7 @@ def get_claim_service() -> ClaimService:
     summary="Upload a document for fact-checking",
 )
 async def upload_document(
-    file: UploadFile = File(..., description="PDF, image, or text file."),
+    file: UploadFile = File(..., description="PDF, DOCX, image (PNG/JPG/GIF/WEBP), or text file."),
     title: str | None = Form(default=None),
     source_type: str = Form(default="upload"),
     session: Session = Depends(get_session),
@@ -199,6 +199,8 @@ def get_document_results(
         "partial": 0,
         "contradicted": 0,
         "no_evidence": 0,
+        "not_applicable": 0,
+        "antisemitic_trope": 0,
         "unverified": 0,
     }
 
@@ -206,12 +208,13 @@ def get_document_results(
     for claim in claims:
         if claim.verdict:
             verdict_counts[claim.verdict] = verdict_counts.get(claim.verdict, 0) + 1
-            if claim.score is not None:
+            # Only include scores from factual claims (exclude not_applicable and antisemitic_trope)
+            if claim.score is not None and claim.verdict not in ["not_applicable", "antisemitic_trope"]:
                 scores.append(claim.score)
         else:
             verdict_counts["unverified"] += 1
 
-    # Calculate overall score (average of all claim scores)
+    # Calculate overall score (average of factual claim scores only, excluding not_applicable)
     overall_score = sum(scores) / len(scores) if scores else None
 
     # Determine risk level
@@ -236,6 +239,8 @@ def get_document_results(
             partial=verdict_counts["partial"],
             contradicted=verdict_counts["contradicted"],
             no_evidence=verdict_counts["no_evidence"],
+            not_applicable=verdict_counts["not_applicable"],
+            antisemitic_trope=verdict_counts["antisemitic_trope"],
             unverified=verdict_counts["unverified"],
         ),
         risk_level=risk_level,

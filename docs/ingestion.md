@@ -1,16 +1,19 @@
 # Ingestion & OCR Plan
 
 ## Goals
+
 - Accept PDFs, images, and plain-text uploads related to antisemitism topics.
 - Normalize raw artifacts into clean text suitable for claim extraction.
 - Track ingestion status end-to-end with audit-friendly metadata.
 
 ## Storage Layout
+
 - `Settings.ingest_bucket_path` (default `data/uploads/`): original files keyed by UUID + original filename.
 - `Settings.processed_text_path` (default `data/processed/`): normalized UTF-8 text per document (`{document_id}.txt`).
 - Metadata in `Document.raw_path` / `Document.text_path` keeps pointers to these assets; long-term plan is to swap to S3-compatible storage with the same interface.
 
 ## Pipeline Stages
+
 1. **Upload API (`POST /v1/documents`)**
    - `multipart/form-data` fields:
      - `file` (required): PDF, image, or `.txt`.
@@ -37,6 +40,7 @@
    - `/v1/documents/{id}` returns latest status + storage metadata; `/v1/documents` lists recent uploads.
 
 ## Async Execution
+
 - Job queue abstraction (`backend/app/worker/queue.py`) supports:
   - `SyncJobQueue` (default dev/test) processes inline.
   - `ArqJobQueue` pushes jobs to Redis via `arq`; run workers with `arq backend.app.worker.jobs.WorkerSettings`.
@@ -47,7 +51,7 @@
 - For retries, rely on worker strategy (arq retry hooks) or re-enqueue from API/admin tools.
 
 ## Security & Validation
+
 - Enforce file size/type limits (configurable).
 - Virus scan hook (future) before storage if handling untrusted files.
 - Log ingestion actions with document IDs for traceability.
-

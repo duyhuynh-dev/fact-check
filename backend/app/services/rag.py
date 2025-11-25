@@ -20,6 +20,9 @@ class EvidenceSnippet:
     source_name: str
     snippet: str
     source_uri: str | None = None
+    citation: str | None = None
+    author: str | None = None
+    reliability_score: float | None = None
 
 
 @dataclass
@@ -49,8 +52,8 @@ class InMemoryVectorStore:
     def add(self, chunk: DocumentChunk) -> None:
         self.chunks.append(chunk)
 
-    def search(self, query_embedding: list[float], limit: int = 5) -> list[DocumentChunk]:
-        """Cosine similarity search."""
+    def search(self, query_embedding: list[float], query_text: str = "", limit: int = 5, min_similarity: float = 0.3) -> list[DocumentChunk]:
+        """Hybrid search: semantic (embedding) + keyword matching."""
         if not self.chunks:
             return []
 
@@ -59,19 +62,35 @@ class InMemoryVectorStore:
         if not chunks_with_embeddings:
             return []
 
-        # Compute cosine similarities
         query_vec = np.array(query_embedding)
-        similarities = []
+        query_lower = query_text.lower()
+        query_keywords = set(query_lower.split())
+
+        # Compute hybrid scores (semantic + keyword)
+        scored_chunks = []
         for chunk in chunks_with_embeddings:
             chunk_vec = np.array(chunk.embedding)
-            similarity = np.dot(query_vec, chunk_vec) / (
+            
+            # Semantic similarity (0-1)
+            semantic_score = np.dot(query_vec, chunk_vec) / (
                 np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec)
             )
-            similarities.append((similarity, chunk))
+            
+            # Keyword matching boost
+            chunk_lower = chunk.text.lower()
+            chunk_keywords = set(chunk_lower.split())
+            keyword_overlap = len(query_keywords & chunk_keywords) / max(len(query_keywords), 1)
+            keyword_boost = min(keyword_overlap * 0.2, 0.2)  # Max 0.2 boost
+            
+            # Combined score
+            combined_score = semantic_score + keyword_boost
+            
+            if combined_score >= min_similarity:
+                scored_chunks.append((combined_score, semantic_score, chunk))
 
-        # Sort by similarity and return top-k
-        similarities.sort(key=lambda x: x[0], reverse=True)
-        return [chunk for _, chunk in similarities[:limit]]
+        # Sort by combined score, then by semantic score
+        scored_chunks.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        return [chunk for _, _, chunk in scored_chunks[:limit]]
 
 
 class EmbeddingService:
@@ -134,41 +153,105 @@ class EvidenceRetriever:
             use_free=use_free,
         )
 
-    def retrieve(self, claim_text: str, limit: int = 5) -> list[EvidenceSnippet]:
-        """Retrieve relevant evidence for a claim."""
+    def retrieve(self, claim_text: str, limit: int = 5, min_similarity: float = 0.3) -> list[EvidenceSnippet]:
+        """Retrieve relevant evidence for a claim using hybrid search."""
         if not self.vector_store.chunks:
             return []  # No evidence loaded yet
 
         query_embedding = self.embedding_service.embed(claim_text)
-        chunks = self.vector_store.search(query_embedding, limit=limit)
+        chunks = self.vector_store.search(
+            query_embedding, 
+            query_text=claim_text, 
+            limit=limit,
+            min_similarity=min_similarity
+        )
 
         return [
             EvidenceSnippet(
                 source_name=chunk.source_name,
                 snippet=chunk.text,
                 source_uri=chunk.source_uri,
+                citation=chunk.metadata.get("citation") if chunk.metadata else None,
+                author=chunk.metadata.get("author") if chunk.metadata else None,
+                reliability_score=chunk.metadata.get("reliability_score") if chunk.metadata else None,
             )
             for chunk in chunks
         ]
 
     def load_from_file(self, file_path: Path, source_name: str) -> None:
-        """Load evidence from a text file (MVP: simple chunking)."""
+        """Load evidence from a text file with improved chunking strategy."""
         text = file_path.read_text(encoding="utf-8")
-        # Simple chunking: split by paragraphs
+        
+        # Improved chunking: split by paragraphs, but also handle long paragraphs
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-
+        
+        chunks_created = 0
         for para in paragraphs:
             if len(para) < 50:  # Skip very short paragraphs
                 continue
-
-            embedding = self.embedding_service.embed(para)
-            chunk = DocumentChunk(
-                text=para,
-                source_name=source_name,
-                source_uri=str(file_path),
-                embedding=embedding,
-            )
-            self.vector_store.add(chunk)
+            
+            # For longer paragraphs, split into sentences and create overlapping chunks
+            if len(para) > 500:
+                # Split into sentences and create overlapping windows
+                sentences = para.split('. ')
+                window_size = 3  # 3 sentences per chunk
+                overlap = 1  # 1 sentence overlap
+                
+                for i in range(0, len(sentences), window_size - overlap):
+                    chunk_text = '. '.join(sentences[i:i + window_size])
+                    if len(chunk_text.strip()) < 50:
+                        continue
+                    if not chunk_text.endswith('.'):
+                        chunk_text += '.'
+                    
+                    embedding = self.embedding_service.embed(chunk_text)
+                    # Extract source metadata from filename or default
+                    metadata = {
+                        "chunk_type": "sentence_window",
+                        "chunk_index": chunks_created,
+                        "reliability_score": 0.8,  # Default reliability for loaded evidence
+                    }
+                    # Try to infer author/source from filename
+                    if "adl" in source_name.lower():
+                        metadata["author"] = "Anti-Defamation League"
+                        metadata["reliability_score"] = 0.9
+                    elif "encyclopedia" in source_name.lower() or "holocaust" in source_name.lower():
+                        metadata["reliability_score"] = 0.95
+                    
+                    chunk = DocumentChunk(
+                        text=chunk_text.strip(),
+                        source_name=source_name,
+                        source_uri=str(file_path),
+                        embedding=embedding,
+                        metadata=metadata
+                    )
+                    self.vector_store.add(chunk)
+                    chunks_created += 1
+            else:
+                # Use paragraph as-is for shorter paragraphs
+                embedding = self.embedding_service.embed(para)
+                
+                # Extract source metadata
+                metadata = {
+                    "chunk_type": "paragraph",
+                    "chunk_index": chunks_created,
+                    "reliability_score": 0.8,
+                }
+                if "adl" in source_name.lower():
+                    metadata["author"] = "Anti-Defamation League"
+                    metadata["reliability_score"] = 0.9
+                elif "encyclopedia" in source_name.lower() or "holocaust" in source_name.lower():
+                    metadata["reliability_score"] = 0.95
+                
+                chunk = DocumentChunk(
+                    text=para,
+                    source_name=source_name,
+                    source_uri=str(file_path),
+                    embedding=embedding,
+                    metadata=metadata
+                )
+                self.vector_store.add(chunk)
+                chunks_created += 1
 
 
 def create_default_evidence_retriever() -> EvidenceRetriever:

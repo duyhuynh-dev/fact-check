@@ -36,13 +36,30 @@ This project supports **100% free operation** using:
    ```
 
 4. **Run the server:**
+
    ```bash
    poetry run uvicorn backend.app.main:app --reload
    ```
 
+5. **Open the frontend:**
+   - Visit: http://localhost:8000
+   - Upload a document and watch it get fact-checked!
+
 See `docs/gemini_setup.md` for detailed instructions.
 
 **Cost: $0.00** (within Gemini free tier limits) 🎉
+
+## Frontend
+
+A modern, clean frontend is included in the `frontend/` directory. It features:
+
+- Drag & drop document upload
+- Real-time processing progress
+- Visual score display
+- Claim-by-claim verdict breakdown
+- Responsive design
+
+The frontend is automatically served when you run the FastAPI server.
 
 ## Vision
 

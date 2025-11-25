@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development")
     database_dsn: str = Field(
-        default="postgresql+psycopg://user:password@localhost:5432/factcheck"
+        default="sqlite:///./factcheck.db"
     )
     ingest_bucket_path: str = Field(default="./data/uploads")
     processed_text_path: str = Field(default="./data/processed")
@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     free_mode: bool = Field(
         default=False,
         description="Free mode: uses local models and mock verification (no API costs)",
+    )
+    evidence_min_similarity: float = Field(
+        default=0.3,
+        description="Minimum similarity threshold for evidence retrieval (0.0-1.0)",
+    )
+    evidence_retrieval_limit: int = Field(
+        default=5,
+        description="Maximum number of evidence snippets to retrieve per claim",
     )
 
 
