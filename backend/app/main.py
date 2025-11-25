@@ -78,12 +78,35 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """Application factory to keep wiring testable."""
+    from fastapi.middleware.cors import CORSMiddleware
+    
     app = FastAPI(
         title="Antisemitism Fact-Check API",
         version="0.1.0",
         description="Prototype API for ingestion, retrieval, and verification services.",
         lifespan=lifespan,
     )
+    
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production, specify actual origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Add exception handler for unhandled errors
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request, exc):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(exc)}"}
+        )
 
     @app.get("/healthz", tags=["health"])
     async def healthcheck() -> dict:

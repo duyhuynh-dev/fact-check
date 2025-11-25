@@ -19,7 +19,19 @@ class SyncJobQueue:
     """Simple queue that runs jobs inline (default dev/test behavior)."""
 
     async def enqueue(self, document_id: str) -> None:
-        run_ingestion_job(document_id)
+        """Enqueue job - run in background thread to avoid blocking."""
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Run the sync function in a thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, run_ingestion_job, document_id)
+            logger.info(f"Job completed for document {document_id}")
+        except Exception as e:
+            logger.error(f"Job failed for document {document_id}: {str(e)}", exc_info=True)
+            # Don't raise - let the job handle its own error reporting
 
 
 class ArqJobQueue:

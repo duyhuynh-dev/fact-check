@@ -56,16 +56,37 @@ async def upload_document(
 ) -> DocumentRead:
     """Accept a document upload, store the artifact, and create a DB record."""
     import logging
+    import asyncio
     logger = logging.getLogger(__name__)
+    
+    # File size limit: 100MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024
     
     try:
         logger.info(f"Received upload request: filename={file.filename}, title={title}")
-        file_bytes = await file.read()
-        logger.info(f"File read successfully, size: {len(file_bytes)} bytes")
         
+        # Read file with size check
+        file_bytes = await file.read()
+        file_size = len(file_bytes)
+        logger.info(f"File read successfully, size: {file_size} bytes")
+        
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+            )
+        
+        if file_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is empty"
+            )
+        
+        # Store file
         stored_path = ingestion_service.store_raw(file_bytes, file.filename)
         logger.info(f"File stored at: {stored_path}")
 
+        # Create document record
         document = Document(
             title=title or file.filename,
             source_type=source_type,
@@ -77,13 +98,26 @@ async def upload_document(
         session.refresh(document)
         logger.info(f"Document created with ID: {document.id}")
 
-        await job_queue.enqueue(document.id)
-        logger.info(f"Job enqueued for document {document.id}")
+        # Enqueue job (non-blocking, fire and forget)
+        try:
+            # Don't await - let it run in background to avoid timeout
+            asyncio.create_task(job_queue.enqueue(document.id))
+            logger.info(f"Job enqueued for document {document.id}")
+        except Exception as job_error:
+            logger.error(f"Failed to enqueue job for document {document.id}: {str(job_error)}")
+            # Don't fail the upload if job enqueue fails - job can be retried later
         
         return DocumentRead.model_validate(document)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}", exc_info=True)
-        session.rollback()
+        try:
+            session.rollback()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload document: {str(e)}"
