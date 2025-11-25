@@ -36,6 +36,10 @@ RUN python -m spacy download en_core_web_sm
 # Copy application code
 COPY . .
 
+# Verify frontend directory was copied
+RUN ls -la /app/ | grep -E "(frontend|backend)" || echo "Warning: frontend or backend not found"
+RUN if [ -d "/app/frontend" ]; then echo "✓ Frontend directory found"; ls -la /app/frontend/; else echo "✗ Frontend directory NOT found"; fi
+
 # Create necessary directories
 RUN mkdir -p data/uploads data/processed vectorstore
 
