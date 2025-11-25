@@ -31,6 +31,48 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["health"])
     async def healthcheck() -> dict[str, str]:
         return {"status": "ok"}
+    
+    @app.get("/debug/paths", tags=["debug"])
+    async def debug_paths() -> dict:
+        """Debug endpoint to check filesystem paths."""
+        import os
+        current_dir = Path.cwd()
+        main_file = Path(__file__)
+        possible_frontend_paths = [
+            main_file.parent.parent.parent / "frontend",
+            Path("/app/frontend"),
+            Path("frontend"),
+        ]
+        
+        results = {
+            "current_dir": str(current_dir),
+            "__file__": str(main_file),
+            "paths_checked": [],
+            "root_contents": []
+        }
+        
+        # Check root directory contents
+        try:
+            root_path = Path("/app") if Path("/app").exists() else current_dir
+            if root_path.exists():
+                results["root_contents"] = [item.name for item in root_path.iterdir() if item.is_dir() or item.name.endswith(('.html', '.css', '.js'))]
+        except Exception as e:
+            results["root_contents_error"] = str(e)
+        
+        # Check each possible frontend path
+        for path in possible_frontend_paths:
+            abs_path = path.resolve() if path.is_absolute() else current_dir / path
+            exists = abs_path.exists()
+            has_index = (abs_path / "index.html").exists() if exists else False
+            results["paths_checked"].append({
+                "path": str(path),
+                "resolved": str(abs_path),
+                "exists": exists,
+                "has_index.html": has_index,
+                "contents": list(abs_path.iterdir()) if exists and abs_path.is_dir() else []
+            })
+        
+        return results
 
     app.include_router(documents_router)
     app.include_router(evidence_router)
