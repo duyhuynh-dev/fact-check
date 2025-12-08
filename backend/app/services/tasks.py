@@ -1,10 +1,9 @@
 """Background task helpers for ingestion."""
 
+import logging
 from pathlib import Path
 
-from sqlmodel import Session
-
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from backend.app.core.config import get_settings
 from backend.app.db.models import Claim, Document
@@ -22,6 +21,8 @@ def run_ingestion_job(
     service: IngestionService | None = None,
 ) -> None:
     """Process a document: OCR + normalized text persistence with progress tracking."""
+    logger = logging.getLogger(__name__)
+    logger.info("Starting ingestion job for document %s", document_id)
     ingestion_service = service or create_default_ingestion_service()
 
     def update_progress(progress: float, message: str) -> None:
@@ -56,15 +57,32 @@ def run_ingestion_job(
             
             # OCR with progress tracking
             update_progress(0.1, "Extracting text from document...")
+            progress_cb = lambda p, msg: update_progress(0.1 + p * 0.3, msg)
             try:
-                text = ingestion_service.run_ocr(
-                    file_path,
-                    progress_callback=lambda p, msg: update_progress(0.1 + p * 0.3, msg)
-                )
+                try:
+                    text = ingestion_service.run_ocr(
+                        file_path,
+                        progress_callback=progress_cb,
+                    )
+                except TypeError as type_err:
+                    # Fallback for ingestion services that don't support progress callbacks yet
+                    if "progress_callback" in str(type_err):
+                        text = ingestion_service.run_ocr(file_path)
+                    else:
+                        raise
+                
+                if not text or not text.strip():
+                    raise ValueError(
+                        "Parsed document contains no text. "
+                        "If this is a scan or an image-heavy PDF, please upload a clearer copy or use the screenshot option."
+                    )
             except MemoryError:
                 raise ValueError(
                     "Document is too large to process. Try splitting into smaller files (recommended: <500 pages)."
                 )
+            except ValueError:
+                # Re-raise ValueError as-is (e.g., empty text)
+                raise
             except Exception as e:
                 if "memory" in str(e).lower() or "too large" in str(e).lower():
                     raise ValueError(
@@ -77,7 +95,15 @@ def run_ingestion_job(
             document.text_path = str(text_path)
             
             update_progress(0.5, "Extracting claims...")
-            claims = ClaimService().extract_for_document(session, document)
+            try:
+                claims = ClaimService().extract_for_document(session, document)
+            except Exception as claim_error:
+                raise ValueError(f"Claim extraction failed: {claim_error}") from claim_error
+            if not claims:
+                raise ValueError(
+                    "No claims were detected in the parsed text. "
+                    "Please ensure the document contains factual statements or try a different section."
+                )
             document.ingest_progress = 0.6
             document.ingest_progress_message = f"Extracted {len(claims)} claims. Verifying..."
             session.add(document)
@@ -180,7 +206,13 @@ def run_ingestion_job(
             document.ingest_failure_reason = str(exc)
             document.ingest_progress = None
             document.ingest_progress_message = f"Failed: {str(exc)[:100]}"
+            logger.exception("Ingestion job failed for document %s: %s", document_id, exc)
         finally:
             session.add(document)
             session.commit()
+            logger.info(
+                "Ingestion job completed with status %s for document %s",
+                document.ingest_status,
+                document_id,
+            )
 

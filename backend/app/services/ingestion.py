@@ -322,10 +322,19 @@ class CompositeOCRBackend:
     def supports(self, input_path: Path) -> bool:
         return any(adapter.supports(input_path) for adapter in self.adapters)
 
-    def extract_text(self, input_path: Path) -> str:
+    def extract_text(self, input_path: Path, progress_callback=None) -> str:
+        """Delegate to the first adapter that supports the file, preserving progress callbacks."""
         for adapter in self.adapters:
-            if adapter.supports(input_path):
-                return adapter.extract_text(input_path)
+            if not adapter.supports(input_path):
+                continue
+            try:
+                # Try to pass progress callback if adapter signature supports it
+                return adapter.extract_text(input_path, progress_callback=progress_callback)
+            except TypeError as type_err:
+                if "progress_callback" in str(type_err):
+                    # Adapter does not accept progress_callback yet
+                    return adapter.extract_text(input_path)
+                raise
         raise ValueError(f"No OCR backend supports {input_path.suffix or 'binary'}")
 
 

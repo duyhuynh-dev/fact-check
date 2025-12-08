@@ -38,71 +38,15 @@ class GeminiClaimVerifier:
             )
 
     def verify(self, claim: Claim, session: Session) -> Claim:
-        """Verify a claim: FIRST analyze with LLM for antisemitic content, THEN fact-check if needed."""
+        """Verify a claim: FIRST use policy engine to classify, THEN fact-check if needed."""
         from backend.app.core.config import get_settings
+        from backend.app.services.policy_engine import create_classification_prompt
         
         settings = get_settings()
         
-        # STEP 1: LLM ANALYSIS FIRST - Determine if content is antisemitic or a factual claim
-        # This is the PRIMARY analysis - LLM analyzes tone, intent, and content type
-        analysis_prompt = f"""You are an expert in identifying antisemitic content and analyzing text tone, intent, and meaning.
-
-CRITICAL TASK: Analyze this text's TONE, INTENT, and CONTENT TYPE. Pay special attention to how the text FEELS and what it's trying to DO.
-
-TEXT TO ANALYZE:
-{claim.text}
-
-STEP 1: TONE ANALYSIS
-Analyze the emotional tone and attitude:
-- Is the tone threatening, hostile, aggressive, or menacing?
-- Is there anger, hatred, or contempt?
-- Is it neutral/informative or does it carry emotional weight?
-- Does it use language that suggests violence, intimidation, or harm?
-- Look for: "war", "threaten", "show you", "get you", "example", "influence me", "this ain't a game"
-
-STEP 2: INTENT ANALYSIS
-What is the text trying to accomplish?
-- Is it trying to intimidate or threaten?
-- Is it trying to spread conspiracy theories?
-- Is it trying to blame or scapegoat?
-- Is it trying to make a factual statement?
-- What is the underlying message or purpose?
-
-STEP 3: ANTISEMITIC INDICATORS
-Look for these specific patterns:
-- Threatening language + references to "Jewish people" or "Jews"
-- Conspiracy theories about Jews controlling things
-- Stereotypes about Jews (money, power, influence)
-- Coded language or dog whistles
-- Hostile intent toward Jewish people or groups
-- Language that suggests "war" or conflict with Jewish people
-
-STEP 4: CONTENT CLASSIFICATION
-Based on tone, intent, and indicators:
-- If threatening/hostile + mentions Jews → ANTISEMITIC (content_type: "antisemitic_trope")
-- If conspiracy theory about Jews → ANTISEMITIC (content_type: "antisemitic_trope")
-- If factual claim about history → FACTUAL (content_type: "factual_claim")
-- If religious/mythological → NOT APPLICABLE (content_type: "not_applicable")
-
-Respond with VALID JSON only (no markdown, no extra text):
-{{
-  "is_antisemitic": true or false,
-  "is_factual_claim": true or false,
-  "content_type": "antisemitic_trope" or "factual_claim" or "not_applicable",
-  "tone": "threatening" or "hostile" or "aggressive" or "menacing" or "neutral" or "informative",
-  "emotional_weight": "high" or "medium" or "low",
-  "intent": "detailed description of what the text is trying to do",
-  "detected_patterns": ["pattern1", "pattern2"] or [],
-  "confidence": 0.0 to 1.0,
-  "explanation": "detailed explanation including tone, intent, and why it's antisemitic or not"
-}}
-
-TONE EXAMPLES:
-- "This is war against Jewish people" → tone: "threatening", emotional_weight: "high", is_antisemitic: true
-- "This ain't a game. Imma use you as an example to show the Jewish people..." → tone: "threatening", emotional_weight: "high", is_antisemitic: true
-- "Jews control the media" → tone: "hostile", emotional_weight: "medium", is_antisemitic: true
-- "The Holocaust happened in 1941-1945" → tone: "informative", emotional_weight: "low", is_antisemitic: false
-"""
+        # STEP 1: POLICY ENGINE CLASSIFICATION - Use IHRA-based policy to classify content
+        # This is the PRIMARY analysis - distinguishes legitimate criticism from antisemitism
+        analysis_prompt = create_classification_prompt(claim.text)
 
         try:
             analysis_response = self.client.generate_content(analysis_prompt)
@@ -129,6 +73,19 @@ TONE EXAMPLES:
             import re
             try:
                 analysis_data = json.loads(analysis_content)
+                
+                # Map policy engine categories to verdicts
+                category = analysis_data.get("category", "").lower()
+                if category == "antisemitic":
+                    analysis_data["is_antisemitic"] = True
+                    analysis_data["content_type"] = "antisemitic_trope"
+                elif category == "critical_but_not_antisemitic":
+                    analysis_data["is_antisemitic"] = False
+                    analysis_data["content_type"] = "factual_claim"  # Treat as factual for fact-checking
+                elif category == "not_applicable":
+                    analysis_data["is_antisemitic"] = False
+                    analysis_data["content_type"] = "not_applicable"
+                
             except json.JSONDecodeError as json_err:
                 # Enhanced fallback: Extract tone and intent from text even if JSON is malformed
                 content_lower = analysis_content.lower()
@@ -248,22 +205,30 @@ TONE EXAMPLES:
                 session.refresh(claim)
                 return claim
             
-            # STEP 3: If not antisemitic, check if it's a factual claim to verify
-            # Only retrieve evidence for factual claims
-            if analysis_data.get("content_type") == "not_applicable":
-                # Religious/mythological content
+            # STEP 3: Handle legitimate criticism of Israel
+            # If it's legitimate criticism, treat as factual claim for fact-checking
+            if category == "critical_but_not_antisemitic" or is_legitimate_criticism:
+                # This is legitimate criticism - proceed to fact-checking
+                analysis_data["content_type"] = "factual_claim"
+                analysis_data["is_factual_claim"] = True
+            
+            # STEP 4: If not applicable, mark and return
+            if category == "not_applicable" or analysis_data.get("content_type") == "not_applicable":
+                # Not applicable content
                 claim.verdict = "not_applicable"
-                claim.rationale = analysis_data.get("explanation", "This is not a factual claim to verify.")
+                rationale = analysis_data.get("reasoning") or analysis_data.get("explanation", "This is not a factual claim to verify.")
+                claim.rationale = rationale
                 claim.score = None
                 if claim.metadata_json is None:
                     claim.metadata_json = {}
                 claim.metadata_json["llm_analysis"] = analysis_data
+                claim.metadata_json["policy_classification"] = category
                 session.add(claim)
                 session.commit()
                 session.refresh(claim)
                 return claim
             
-            # STEP 4: For factual claims, retrieve evidence and compare
+            # STEP 5: For factual claims, retrieve evidence and compare
             evidence = self.evidence_retriever.retrieve(
                 claim.text, 
                 limit=settings.evidence_retrieval_limit,
