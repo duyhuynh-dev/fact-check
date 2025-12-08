@@ -1,77 +1,17 @@
 import logging
 import sys
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import FileResponse
 
 from backend.app.db.session import init_db
 from backend.app.routes.documents import router as documents_router
 from backend.app.routes.evidence import router as evidence_router
 from backend.app.core.config import get_settings
-
-
-class WildcardCORSMiddleware(BaseHTTPMiddleware):
-    """Custom CORS middleware that supports wildcard patterns like *.vercel.app"""
-    
-    def __init__(self, app: FastAPI, allowed_origins: List[str]):
-        super().__init__(app)
-        self.allowed_origins = allowed_origins
-        self.allowed_patterns: List[re.Pattern] = []
-        self.exact_origins: List[str] = []
-        self.allow_all = False
-        
-        for origin in allowed_origins:
-            if origin == "*":
-                self.allow_all = True
-                return
-            elif "*" in origin:
-                # Convert wildcard pattern to regex
-                pattern = origin.replace(".", r"\.").replace("*", r".*")
-                self.allowed_patterns.append(re.compile(f"^{pattern}$"))
-            else:
-                self.exact_origins.append(origin)
-    
-    async def dispatch(self, request: Request, call_next):
-        origin = request.headers.get("origin")
-        
-        # Handle preflight requests
-        if request.method == "OPTIONS":
-            if self.allow_all or (origin and self._is_origin_allowed(origin)):
-                response = Response()
-                response.headers["Access-Control-Allow-Origin"] = origin or "*"
-                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-                response.headers["Access-Control-Allow-Headers"] = "*"
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Max-Age"] = "3600"
-                return response
-        
-        response = await call_next(request)
-        
-        # Add CORS headers to response
-        if origin and (self.allow_all or self._is_origin_allowed(origin)):
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-        elif self.allow_all:
-            response.headers["Access-Control-Allow-Origin"] = "*"
-        
-        return response
-    
-    def _is_origin_allowed(self, origin: str) -> bool:
-        """Check if origin is allowed based on exact matches or patterns"""
-        if origin in self.exact_origins:
-            return True
-        
-        for pattern in self.allowed_patterns:
-            if pattern.match(origin):
-                return True
-        
-        return False
 
 # Configure logging to show INFO level messages
 logging.basicConfig(
@@ -159,14 +99,30 @@ def create_app() -> FastAPI:
             content={"detail": f"Internal server error: {str(exc)}"}
         )
 
-    # Configure CORS with wildcard support
-    if settings.app_env == "development" or settings.cors_origins == "*":
-        cors_origins = ["*"]
-    else:
-        cors_origins = [origin.strip() for origin in settings.cors_origins.split(",")]
+    # CORS configuration - MUST be added LAST (outermost layer)
+    # Filter out wildcard patterns from exact origins
+    exact_origins = [origin for origin in settings.cors_origins if "*" not in origin]
+    # Extract wildcard patterns for regex matching
+    wildcard_patterns = [origin for origin in settings.cors_origins if "*" in origin]
     
-    # Use custom middleware for wildcard support (e.g., *.vercel.app)
-    app.add_middleware(WildcardCORSMiddleware, allowed_origins=cors_origins)
+    # Convert wildcard patterns to regex (e.g., "https://*.vercel.app" -> r"https://.*\.vercel\.app")
+    origin_regex_patterns = []
+    for pattern in wildcard_patterns:
+        # Convert wildcard to regex: escape dots, replace * with .*
+        regex = pattern.replace(".", r"\.").replace("*", ".*")
+        origin_regex_patterns.append(regex)
+    
+    # Combine regex patterns if any exist
+    origin_regex = "|".join([f"^{p}$" for p in origin_regex_patterns]) if origin_regex_patterns else None
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=exact_origins if exact_origins else [],
+        allow_origin_regex=origin_regex,  # This handles wildcard patterns!
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/healthz", tags=["health"])
     async def healthcheck() -> dict:
