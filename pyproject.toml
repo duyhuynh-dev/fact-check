@@ -42,6 +42,11 @@ ruff = "^0.6.0"
 black = "^24.8.0"
 pre-commit = "^3.8.0"
 
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
 [build-system]
 requires = ["poetry-core>=1.8.0"]
 build-backend = "poetry.core.masonry.api"
