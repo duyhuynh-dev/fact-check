@@ -48,6 +48,10 @@ class Settings(BaseSettings):
         default=5,
         description="Maximum number of evidence snippets to retrieve per claim",
     )
+    cors_origins: str = Field(
+        default="*",
+        description="Comma-separated list of allowed CORS origins. Supports wildcards like '*.vercel.app'. Use '*' for all origins.",
+    )
 
 
 @lru_cache

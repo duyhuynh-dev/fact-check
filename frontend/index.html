@@ -142,6 +142,11 @@
       </section>
     </div>
 
+    <script>
+      // Set API base URL from environment variable
+      // This will be replaced at build time by Vercel
+      window.API_BASE_URL = "{{API_URL}}";
+    </script>
     <script src="/app.js"></script>
   </body>
 </html>
