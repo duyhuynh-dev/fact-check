@@ -54,11 +54,13 @@ nano .env
 ```
 
 **Required settings:**
+
 - `GEMINI_API_KEY` - Your Gemini API key
 - `CORS_ORIGINS` - Set to `https://*.vercel.app` (allows all Vercel deployments)
 - `APP_ENV` - Set to `production`
 
 **Optional settings:**
+
 - `VERIFICATION_PROVIDER` - Default is `gemini`
 - `CLAIM_EXTRACTOR` - Default is `spacy`
 
@@ -141,6 +143,7 @@ sudo certbot --nginx -d your-domain.com -d www.your-domain.com
 ## Troubleshooting
 
 ### Service won't start
+
 ```bash
 # Check logs
 sudo journalctl -u fact-check -n 50
@@ -153,6 +156,7 @@ cat /opt/fact-check/.env
 ```
 
 ### Permission errors
+
 ```bash
 # Fix ownership
 sudo chown -R $USER:$USER /opt/fact-check
@@ -160,10 +164,12 @@ sudo chown -R $USER:$USER /opt/fact-check/data
 ```
 
 ### CORS issues
+
 - Verify `CORS_ORIGINS=https://*.vercel.app` in `.env`
 - Restart service: `sudo systemctl restart fact-check`
 
 ### Port already in use
+
 ```bash
 # Find process using port 8000
 sudo lsof -i :8000
@@ -175,6 +181,7 @@ sudo kill -9 <PID>
 ## Next Steps
 
 After EC2 is set up:
+
 1. Deploy frontend to Vercel
 2. Set `NEXT_PUBLIC_API_URL` in Vercel to your EC2 backend URL
 3. Test the full application
