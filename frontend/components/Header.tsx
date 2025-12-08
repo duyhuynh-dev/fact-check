@@ -1,3 +1,5 @@
+import ThemeToggle from "./ThemeToggle";
+
 export default function Header() {
   return (
     <header className="header">
@@ -9,8 +11,8 @@ export default function Header() {
         <a href="#results" className="nav-link">
           Results
         </a>
+        <ThemeToggle />
       </nav>
     </header>
   );
 }
-
