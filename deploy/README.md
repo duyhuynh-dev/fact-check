@@ -32,3 +32,4 @@ See `DEPLOYMENT.md` for detailed instructions.
 - `vercel-build.sh` - Build script for Vercel
 - `.env.example.ec2` - Example environment variables for EC2
 - `DEPLOYMENT.md` - Complete deployment guide
+

@@ -41,6 +41,14 @@ export default function UploadSection({
 
       setProgress(30);
       setProgressText("Sending to server...");
+
+      if (!apiBase) {
+        throw new Error(
+          "API URL not configured. Please set NEXT_PUBLIC_API_URL in Vercel."
+        );
+      }
+
+      console.log("Uploading to:", `${apiBase}/v1/documents`);
       const response = await fetch(`${apiBase}/v1/documents`, {
         method: "POST",
         body: formData,
@@ -56,9 +64,18 @@ export default function UploadSection({
       await waitForIngestion(document.id);
     } catch (error) {
       console.error("Upload error:", error);
-      alert(
-        `Error: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
+      console.error("API Base URL:", apiBase);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage.includes("Failed to fetch")) {
+        alert(
+          `Connection failed. Check:\n1. NEXT_PUBLIC_API_URL is set in Vercel\n2. Backend is running at ${
+            apiBase || "not set"
+          }\n3. CORS is configured on backend`
+        );
+      } else {
+        alert(`Error: ${errorMessage}`);
+      }
       setUploading(false);
       setProgress(0);
     }
@@ -234,3 +251,4 @@ survivor testimonies. Holocaust denial is illegal in many countries and is widel
     </section>
   );
 }
+

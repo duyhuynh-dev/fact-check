@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-
 interface ResultsSectionProps {
   documentData: any;
   results: any;
   claims: any[];
   onReset: () => void;
+  apiBase: string;
 }
 
 export default function ResultsSection({
@@ -14,18 +13,8 @@ export default function ResultsSection({
   results,
   claims,
   onReset,
+  apiBase,
 }: ResultsSectionProps) {
-  const scoreCircleRef = useRef<SVGCircleElement>(null);
-
-  useEffect(() => {
-    if (results?.overall_score !== null && scoreCircleRef.current) {
-      const score = results.overall_score;
-      const circumference = 2 * Math.PI * 45;
-      const offset = circumference - (score / 100) * circumference;
-      scoreCircleRef.current.style.strokeDashoffset = String(offset);
-    }
-  }, [results]);
-
   const formatVerdict = (verdict: string) => {
     if (verdict === "not_applicable") return "Not Applicable";
     if (verdict === "no_evidence") return "No Evidence";
@@ -59,32 +48,6 @@ export default function ResultsSection({
 
       {results && (
         <>
-          <div className="score-card">
-            <div className="score-circle">
-              <svg className="score-svg" viewBox="0 0 100 100">
-                <circle className="score-bg" cx="50" cy="50" r="45"></circle>
-                <circle
-                  ref={scoreCircleRef}
-                  className="score-fill"
-                  cx="50"
-                  cy="50"
-                  r="45"
-                ></circle>
-              </svg>
-              <div className="score-value">
-                {results.overall_score !== null
-                  ? Math.round(results.overall_score)
-                  : "--"}
-              </div>
-            </div>
-            <div className="score-info">
-              <h3 className={`risk-level ${results.risk_level}`}>
-                {results.risk_level || "unknown"}
-              </h3>
-              <p className="score-label">Overall Accuracy Score</p>
-            </div>
-          </div>
-
           {results.verdict_summary && (
             <div className="verdict-summary">
               <h3>Verdict Breakdown</h3>
@@ -143,12 +106,6 @@ export default function ResultsSection({
                   <div className="claim-text">{claim.text}</div>
                   <div className={`claim-verdict ${verdictClass}`}>
                     {formatVerdict(verdict)}
-                  </div>
-                </div>
-                <div className="claim-details">
-                  <div className="claim-score">
-                    Score:{" "}
-                    {claim.score !== null ? Math.round(claim.score) : "N/A"}
                   </div>
                 </div>
                 {claim.rationale && (

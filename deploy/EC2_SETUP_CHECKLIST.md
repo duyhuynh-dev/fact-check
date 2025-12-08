@@ -193,3 +193,4 @@ After EC2 is set up:
 - Consider setting up firewall rules (ufw)
 - Monitor logs regularly: `sudo journalctl -u fact-check -f`
 - Set up automated backups for the database
+

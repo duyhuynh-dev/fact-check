@@ -5,3 +5,4 @@ module.exports = {
   // This will be handled by Vercel's build process
   // Environment variables are injected at build time
 };
+

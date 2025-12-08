@@ -286,3 +286,4 @@ sudo tail -f /var/log/nginx/error.log
 - Set up auto-scaling based on load
 - Use CloudFront CDN for static assets
 - Consider using AWS Lambda for serverless functions
+

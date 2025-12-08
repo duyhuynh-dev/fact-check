@@ -97,3 +97,4 @@ echo "   4. Configure security group to allow HTTP/HTTPS traffic"
 echo ""
 echo "Check status: sudo systemctl status fact-check"
 echo "View logs: sudo journalctl -u fact-check -f"
+

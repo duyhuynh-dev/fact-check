@@ -75,3 +75,4 @@ sudo journalctl -u fact-check -f
 - Verify `NEXT_PUBLIC_API_URL` is set in Vercel
 - Check browser console for errors
 - Verify backend is accessible: `curl http://your-ec2-ip/healthz`
+

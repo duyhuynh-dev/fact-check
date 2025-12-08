@@ -5,11 +5,31 @@ import Header from "@/components/Header";
 import UploadSection from "@/components/UploadSection";
 import ResultsSection from "@/components/ResultsSection";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined" ? window.location.origin : "");
+function getApiBase() {
+  if (typeof window !== "undefined") {
+    // Client-side: use environment variable or fallback
+    return process.env.NEXT_PUBLIC_API_URL || "";
+  }
+  return "";
+}
 
 export default function Home() {
+  const [apiBase, setApiBase] = useState("");
+
+  useEffect(() => {
+    // Set API base on client side
+    const base = getApiBase();
+    console.log("API Base from env:", process.env.NEXT_PUBLIC_API_URL);
+    console.log("API Base resolved:", base);
+    if (!base) {
+      console.error("NEXT_PUBLIC_API_URL is not set!");
+      console.error(
+        "Available env vars:",
+        Object.keys(process.env).filter((k) => k.startsWith("NEXT_PUBLIC"))
+      );
+    }
+    setApiBase(base);
+  }, []);
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(
     null
   );
@@ -25,16 +45,20 @@ export default function Home() {
   };
 
   const loadResults = async (documentId: string) => {
+    if (!apiBase) {
+      console.error("API base not set");
+      return;
+    }
     try {
       // Load document info
-      const docResponse = await fetch(`${API_BASE}/v1/documents/${documentId}`);
+      const docResponse = await fetch(`${apiBase}/v1/documents/${documentId}`);
       if (!docResponse.ok) throw new Error("Failed to load document");
       const docData = await docResponse.json();
       setDocumentData(docData);
 
       // Load results
       const resultsResponse = await fetch(
-        `${API_BASE}/v1/documents/${documentId}/results`
+        `${apiBase}/v1/documents/${documentId}/results`
       );
       if (!resultsResponse.ok) throw new Error("Failed to load results");
       const resultsData = await resultsResponse.json();
@@ -42,7 +66,7 @@ export default function Home() {
 
       // Load claims
       const claimsResponse = await fetch(
-        `${API_BASE}/v1/documents/${documentId}/claims`
+        `${apiBase}/v1/documents/${documentId}/claims`
       );
       if (!claimsResponse.ok) throw new Error("Failed to load claims");
       const claimsData = await claimsResponse.json();
@@ -69,10 +93,14 @@ export default function Home() {
   return (
     <div className="container">
       <Header />
-      {!showResults ? (
+      {!apiBase ? (
+        <div style={{ padding: "2rem", textAlign: "center" }}>
+          <p>Loading...</p>
+        </div>
+      ) : !showResults ? (
         <UploadSection
           onUploadComplete={handleUploadComplete}
-          apiBase={API_BASE}
+          apiBase={apiBase}
         />
       ) : (
         <ResultsSection
@@ -80,8 +108,10 @@ export default function Home() {
           results={results}
           claims={claims}
           onReset={handleReset}
+          apiBase={apiBase}
         />
       )}
     </div>
   );
 }
+
